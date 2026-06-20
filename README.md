@@ -1,3 +1,5 @@
+Scalable System
+
 # 🚖 Scalable Ride Matching Platform
 
 A distributed Uber-like ride matching platform built using **Java, Spring Boot, PostgreSQL, Redis, Kafka, and Docker**, supporting real-time driver location tracking, nearest-driver matching, event-driven workflows, and horizontal scalability.
