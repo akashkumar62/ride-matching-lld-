@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Load Test Console</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+  :root {
+    --ink: #0e141b;
+    --ink-raised: #161e27;
+    --ink-raised-2: #1c2530;
+    --text: #e8eaed;
+    --text-muted: #98a2b0;
+    --text-faint: #64707e;
+    --accent: #f2a93b;
+    --ok: #4fd1c5;
+    --danger: #f0635a;
+    --border: rgba(255, 255, 255, 0.09);
+    --border-strong: rgba(255, 255, 255, 0.18);
+    --font-display: -apple-system, "SF Pro Display", "Segoe UI Semibold", system-ui, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--ink);
+    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 14px;
+  }
+  ::selection { background: var(--accent); color: #14100a; }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 26px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    font-size: 17px;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  header .sub { color: var(--text-faint); font-size: 12.5px; font-family: var(--font-mono); margin-top: 2px; }
+
+  .phase-badge {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: var(--ink-raised-2);
+    color: var(--text-muted);
+    border: 1px solid var(--border-strong);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .phase-badge .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .phase-badge.running { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--border-strong)); }
+  .phase-badge.running .dot { animation: pulse 1.4s ease-in-out infinite; }
+  .phase-badge.seeding { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border-strong)); }
+  .phase-badge.stopped { color: var(--text); }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: 18px;
+    padding: 18px 26px 40px;
+    max-width: 1560px;
+    margin: 0 auto;
+  }
+  .col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+
+  .panel {
+    background: var(--ink-raised);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 22px;
+  }
+  .panel h2 {
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    margin: 0 0 16px;
+    font-weight: 600;
+  }
+
+  .control-row { margin-bottom: 16px; }
+  .control-row:last-of-type { margin-bottom: 20px; }
+  .control-row label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  .control-row label span.val { font-family: var(--font-mono); color: var(--text); font-weight: 600; }
+  input[type="range"] {
+    width: 100%;
+    accent-color: var(--accent);
+    height: 4px;
+  }
+
+  .button-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  button {
+    font-family: var(--font-display);
+    font-size: 13.5px;
+    font-weight: 600;
+    padding: 10px 16px;
+    border-radius: 9px;
+    border: 1px solid var(--border-strong);
+    background: var(--ink-raised-2);
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.15s, opacity 0.15s, transform 0.1s;
+  }
+  button:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 8%, var(--ink-raised-2)); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: 0.35; cursor: not-allowed; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #1a1305; }
+  button.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, white); }
+  button.danger { background: transparent; border-color: color-mix(in srgb, var(--danger) 50%, var(--border-strong)); color: var(--danger); }
+  button.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .seed-status {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-faint);
+    margin: 14px 0 0;
+  }
+
+  .tile-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .tile {
+    background: var(--ink-raised-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 13px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .tile-label {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+    font-weight: 600;
+  }
+  .tile-value {
+    font-family: var(--font-mono);
+    font-size: 21px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+  }
+  .tile-value small { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+  .tile-value.accent { color: var(--accent); }
+  .tile-value.ok { color: var(--ok); }
+  .tile-value.danger { color: var(--danger); }
+  .tile-sub { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
+
+  .chart-block { margin-bottom: 20px; }
+  .chart-block:last-child { margin-bottom: 0; }
+  .chart-block h3 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin: 0 0 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .chart-legend { display: flex; gap: 14px; font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
+  .chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .chart-legend .sw { width: 9px; height: 9px; border-radius: 3px; }
+  canvas { display: block; width: 100%; height: 130px; }
+
+  .log-body {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text-muted);
+    height: 220px;
+    overflow-y: auto;
+    background: #0a0f15;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .log-body .log-line { white-space: pre-wrap; word-break: break-word; }
+  .log-body .log-time { color: var(--text-faint); margin-right: 8px; }
+
+  .map-panel { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+  .map-panel h2 { padding: 20px 22px 0; margin-bottom: 12px; }
+  .map-panel iframe { flex: 1; min-height: 560px; border: none; width: 100%; background: #1a1f24; }
+
+  @media (max-width: 1100px) {
+    .layout { grid-template-columns: 1fr; }
+    .tile-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Load Test Console</h1>
+    <div class="sub">ride-matching · k6 + live fleet</div>
+  </div>
+  <div class="phase-badge" id="phase-badge"><span class="dot"></span><span id="phase-text">Idle</span></div>
+</header>
+
+<div class="layout">
+  <div class="col">
+
+    <section class="panel">
+      <h2>Configure</h2>
+
+      <div class="control-row">
+        <label>Drivers <span class="val" id="drivers-val">100</span></label>
+        <input type="range" id="drivers" min="5" max="500" step="5" value="100" />
+      </div>
+      <div class="control-row">
+        <label>Riders <span class="val" id="riders-val">500</span></label>
+        <input type="range" id="riders" min="10" max="5000" step="10" value="500" />
+      </div>
+      <div class="control-row">
+        <label>Ride requests / sec (peak) <span class="val" id="rate-val">10</span></label>
+        <input type="range" id="rate" min="1" max="200" step="1" value="10" />
+      </div>
+      <div class="control-row">
+        <label>Duration (minutes) <span class="val" id="duration-val">2</span></label>
+        <input type="range" id="duration" min="1" max="15" step="1" value="2" />
+      </div>
+
+      <div class="button-row">
+        <button id="btn-seed">Seed accounts</button>
+        <button id="btn-start" class="primary">▶ Start test</button>
+        <button id="btn-stop" class="danger" disabled>■ Stop</button>
+      </div>
+      <p class="seed-status" id="seed-status">0 drivers, 0 riders seeded</p>
+    </section>
+
+    <section class="panel">
+      <h2>Live</h2>
+      <div class="tile-grid">
+        <div class="tile"><span class="tile-label">Requests / sec</span><span class="tile-value accent" id="stat-rps">0</span></div>
+        <div class="tile"><span class="tile-label">Avg latency</span><span class="tile-value" id="stat-avg">0<small> ms</small></span></div>
+        <div class="tile"><span class="tile-label">p95 latency</span><span class="tile-value" id="stat-p95">0<small> ms</small></span></div>
+        <div class="tile"><span class="tile-label">Error rate</span><span class="tile-value" id="stat-err">0<small> %</small></span></div>
+        <div class="tile"><span class="tile-label">Rides requested</span><span class="tile-value" id="stat-rides-req">0</span></div>
+        <div class="tile"><span class="tile-label">Ride request success</span><span class="tile-value ok" id="stat-rides-ok">—</span></div>
+        <div class="tile"><span class="tile-label">Driver pings OK</span><span class="tile-value" id="stat-pings-ok">—</span></div>
+        <div class="tile"><span class="tile-label">Active VUs</span><span class="tile-value" id="stat-vus">0</span></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="chart-block">
+        <h3>
+          Requests / sec
+          <span class="chart-legend">
+            <span><span class="sw" style="background:var(--accent)"></span>riders</span>
+            <span><span class="sw" style="background:var(--ok)"></span>drivers</span>
+          </span>
+        </h3>
+        <canvas id="chart-rps"></canvas>
+      </div>
+      <div class="chart-block">
+        <h3>
+          Latency
+          <span class="chart-legend">
+            <span><span class="sw" style="background:var(--accent)"></span>avg</span>
+            <span><span class="sw" style="background:var(--danger)"></span>p95</span>
+          </span>
+        </h3>
+        <canvas id="chart-latency"></canvas>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Console</h2>
+      <div class="log-body" id="log-body"></div>
+    </section>
+
+  </div>
+
+  <div class="col">
+    <section class="panel map-panel">
+      <h2>Fleet — live</h2>
+      <iframe src="http://localhost:5173/fleet-map.html" title="Live fleet map"></iframe>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+
+  const sliders = {
+    drivers: $("drivers"),
+    riders: $("riders"),
+    rate: $("rate"),
+    duration: $("duration"),
+  };
+  const labels = {
+    drivers: $("drivers-val"),
+    riders: $("riders-val"),
+    rate: $("rate-val"),
+    duration: $("duration-val"),
+  };
+  for (const key of Object.keys(sliders)) {
+    sliders[key].addEventListener("input", () => (labels[key].textContent = sliders[key].value));
+  }
+
+  const btnSeed = $("btn-seed");
+  const btnStart = $("btn-start");
+  const btnStop = $("btn-stop");
+  const seedStatus = $("seed-status");
+  const phaseBadge = $("phase-badge");
+  const phaseText = $("phase-text");
+  const logBody = $("log-body");
+
+  let seedCounts = { drivers: 0, riders: 0 };
+  let phase = "idle";
+  let pendingStartAfterSeed = false;
+
+  function applyPhase(p) {
+    phase = p;
+    phaseBadge.className = "phase-badge " + p;
+    phaseText.textContent = { idle: "Idle", seeding: "Seeding…", running: "Running", stopped: "Ready" }[p] || p;
+    const busy = p === "seeding" || p === "running";
+    btnSeed.disabled = busy;
+    btnStart.disabled = busy;
+    btnStop.disabled = p !== "running";
+  }
+  applyPhase("idle");
+
+  function appendLog(entry) {
+    const line = document.createElement("div");
+    line.className = "log-line";
+    const t = new Date(entry.ts).toLocaleTimeString();
+    line.innerHTML = `<span class="log-time">${t}</span>${escapeHtml(entry.text)}`;
+    logBody.appendChild(line);
+    while (logBody.children.length > 300) logBody.removeChild(logBody.firstChild);
+    logBody.scrollTop = logBody.scrollHeight;
+  }
+  function escapeHtml(s) {
+    return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  }
+
+  function updateSeedStatus() {
+    seedStatus.textContent = `${seedCounts.drivers} driver(s), ${seedCounts.riders} rider(s) seeded`;
+  }
+
+  // ---- API calls ----
+  async function postJson(url, body) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || "request failed");
+    }
+    return res.json();
+  }
+
+  function doSeed() {
+    postJson("/api/seed", { drivers: Number(sliders.drivers.value), riders: Number(sliders.riders.value) }).catch(
+      (e) => appendLog({ ts: Date.now(), text: "Seed request failed: " + e.message })
+    );
+  }
+
+  function doStart() {
+    postJson("/api/start", {
+      driverVUs: Number(sliders.drivers.value),
+      riderRate: Number(sliders.rate.value),
+      durationMin: Number(sliders.duration.value),
+    }).catch((e) => appendLog({ ts: Date.now(), text: "Start request failed: " + e.message }));
+  }
+
+  btnSeed.addEventListener("click", () => {
+    pendingStartAfterSeed = false;
+    doSeed();
+  });
+
+  btnStart.addEventListener("click", () => {
+    const needsSeed = seedCounts.drivers < Number(sliders.drivers.value) || seedCounts.riders < Number(sliders.riders.value);
+    if (needsSeed) {
+      pendingStartAfterSeed = true;
+      doSeed();
+    } else {
+      doStart();
+    }
+  });
+
+  btnStop.addEventListener("click", () => {
+    postJson("/api/stop", {}).catch((e) => appendLog({ ts: Date.now(), text: "Stop request failed: " + e.message }));
+  });
+
+  // ---- Stats ----
+  const stat = {
+    rps: $("stat-rps"),
+    avg: $("stat-avg"),
+    p95: $("stat-p95"),
+    err: $("stat-err"),
+    ridesReq: $("stat-rides-req"),
+    ridesOk: $("stat-rides-ok"),
+    pingsOk: $("stat-pings-ok"),
+    vus: $("stat-vus"),
+  };
+
+  const HISTORY_LEN = 90;
+  const history = { rpsDrivers: [], rpsRiders: [], avg: [], p95: [] };
+  function pushHistory(arr, v) {
+    arr.push(v);
+    if (arr.length > HISTORY_LEN) arr.shift();
+  }
+
+  function applySnapshot(s) {
+    stat.rps.textContent = s.rps.toFixed(1);
+    stat.avg.innerHTML = s.avgMs.toFixed(0) + "<small> ms</small>";
+    stat.p95.innerHTML = s.p95Ms.toFixed(0) + "<small> ms</small>";
+    stat.err.innerHTML = s.errorRatePct.toFixed(1) + "<small> %</small>";
+    stat.err.className = "tile-value " + (s.errorRatePct > 2 ? "danger" : "");
+    stat.vus.textContent = s.vus;
+
+    const rideCheck = s.checks["ride created"];
+    if (rideCheck) {
+      const total = rideCheck.pass + rideCheck.fail;
+      stat.ridesReq.textContent = total;
+      stat.ridesOk.textContent = total ? Math.round((rideCheck.pass / total) * 100) + "%" : "—";
+    }
+    const pingCheck = s.checks["location ping ok"];
+    if (pingCheck) {
+      const total = pingCheck.pass + pingCheck.fail;
+      stat.pingsOk.textContent = total ? Math.round((pingCheck.pass / total) * 100) + "%" : "—";
+    }
+
+    pushHistory(history.rpsDrivers, s.rpsDrivers);
+    pushHistory(history.rpsRiders, s.rpsRiders);
+    pushHistory(history.avg, s.avgMs);
+    pushHistory(history.p95, s.p95Ms);
+    drawCharts();
+  }
+
+  // ---- Charts (hand-rolled canvas line charts, no dependencies) ----
+  const chartRps = $("chart-rps");
+  const chartLatency = $("chart-latency");
+
+  function drawLineChart(canvas, series) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth || 400;
+    const h = canvas.clientHeight || 130;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    const allValues = series.flatMap((s) => s.data);
+    const maxVal = Math.max(1, ...allValues) * 1.2;
+
+    ctx.strokeStyle = "rgba(255,255,255,0.07)";
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 3; i++) {
+      const y = (h * i) / 3;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+
+    for (const s of series) {
+      const n = s.data.length;
+      if (n < 2) continue;
+      const pts = s.data.map((v, i) => [(i / (HISTORY_LEN - 1)) * w, h - (v / maxVal) * h]);
+
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], h);
+      for (const [x, y] of pts) ctx.lineTo(x, y);
+      ctx.lineTo(pts[pts.length - 1][0], h);
+      ctx.closePath();
+      ctx.fillStyle = s.color + "1c";
+      ctx.fill();
+
+      ctx.beginPath();
+      pts.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth = 2;
+      ctx.lineJoin = "round";
+      ctx.stroke();
+    }
+  }
+
+  function drawCharts() {
+    drawLineChart(chartRps, [
+      { data: history.rpsRiders, color: "#f2a93b" },
+      { data: history.rpsDrivers, color: "#4fd1c5" },
+    ]);
+    drawLineChart(chartLatency, [
+      { data: history.avg, color: "#f2a93b" },
+      { data: history.p95, color: "#f0635a" },
+    ]);
+  }
+  window.addEventListener("resize", drawCharts);
+  drawCharts();
+
+  // ---- SSE ----
+  const events = new EventSource("/api/events");
+  events.addEventListener("phase", (e) => applyPhase(JSON.parse(e.data).phase));
+  events.addEventListener("log", (e) => appendLog(JSON.parse(e.data)));
+  events.addEventListener("metrics", (e) => applySnapshot(JSON.parse(e.data)));
+  events.addEventListener("seed", (e) => {
+    seedCounts = JSON.parse(e.data);
+    updateSeedStatus();
+  });
+  events.onerror = () => {
+    /* browser auto-reconnects EventSource */
+  };
+
+  // ---- Initial state ----
+  fetch("/api/state")
+    .then((r) => r.json())
+    .then((s) => {
+      applyPhase(s.phase);
+      seedCounts = s.seedCounts;
+      updateSeedStatus();
+      if (s.lastConfig) {
+        if (s.lastConfig.drivers) sliders.drivers.value = labels.drivers.textContent = s.lastConfig.drivers;
+        if (s.lastConfig.riders) sliders.riders.value = labels.riders.textContent = s.lastConfig.riders;
+        if (s.lastConfig.riderRate) sliders.rate.value = labels.rate.textContent = s.lastConfig.riderRate;
+        if (s.lastConfig.durationMin) sliders.duration.value = labels.duration.textContent = s.lastConfig.durationMin;
+      }
+    })
+    .catch(() => {});
+
+  // if a seed finishes and a start was queued behind it, fire it once phase settles
+  events.addEventListener("phase", (e) => {
+    const p = JSON.parse(e.data).phase;
+    if (p === "stopped" && pendingStartAfterSeed) {
+      pendingStartAfterSeed = false;
+      doStart();
+    }
+  });
+})();
+</script>
+
+</body>
+</html>

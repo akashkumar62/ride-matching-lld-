@@ -1,0 +1,65 @@
+server:
+  port: 8086
+
+spring:
+  application:
+    name: matchingService
+
+  kafka:
+    bootstrap-servers: localhost:9092
+
+    consumer:
+      group-id: matching-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.ridematching.common.*"
+
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+matching:
+  claim:
+    ttl-seconds: 15
+  nearby:
+    radius-km: 5
+    # Deliberately more than a handful — GEORADIUS returns the nearest N by distance regardless of
+    # online/claim status, so too small a limit lets a cluster of closer-but-unavailable drivers
+    # (e.g. several parked at the same busy pickup point) crowd every reachable driver out of the
+    # candidate list entirely. attemptMatch also doubles this alongside the search radius on each
+    # widening pass, on top of this base value.
+    limit: 20
+  rescan:
+    interval-ms: 15000
+    unmatched-older-than-seconds: 20
+
+service:
+  account:
+    email: matching-service@ridematching.internal
+    password: MatchingService!2026Secure
+
+auth:
+  service:
+    url: http://localhost:8081
+
+location:
+  service:
+    url: http://localhost:8085
+
+driver:
+  service:
+    url: http://localhost:8083
+
+ride:
+  service:
+    url: http://localhost:8084
+
+  logging:
+    enabled: true

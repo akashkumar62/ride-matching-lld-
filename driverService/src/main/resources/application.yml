@@ -1,0 +1,57 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: driverService
+
+  datasource:
+    url: jdbc:postgresql://localhost:5433/driver_db
+    username: postgres
+    password: postgres
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+    show-sql: true
+
+  kafka:
+    bootstrap-servers: localhost:9092
+
+    consumer:
+      group-id: driver-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.ridematching.common.*"
+
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+jwt:
+  secret: q7H43OFKhI03ieTW4UsjMan+l2WqVDFGBIXDknfgWx21THp/fOf6W8yXv2lCGVaohJZkSUVrrnFGKwLV2dfk5w==
+
+location:
+  service:
+    url: http://localhost:8085
+
+auth:
+  service:
+    url: http://localhost:8081
+
+service:
+  account:
+    email: driver-service@ridematching.internal
+    password: DriverService!2026Secure
+
+driver:
+  presence:
+    reconcile-interval-ms: 30000
+    grace-period-seconds: 300
+
+ride:
+  logging:
+    enabled: true

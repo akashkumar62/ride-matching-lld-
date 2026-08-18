@@ -1,0 +1,24 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: userService
+
+  datasource:
+    url: jdbc:postgresql://localhost:5433/user_db
+    username: postgres
+    password: postgres
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+    show-sql: true
+
+jwt:
+  secret: q7H43OFKhI03ieTW4UsjMan+l2WqVDFGBIXDknfgWx21THp/fOf6W8yXv2lCGVaohJZkSUVrrnFGKwLV2dfk5w==
+
+ride:
+  logging:
+    enabled: true

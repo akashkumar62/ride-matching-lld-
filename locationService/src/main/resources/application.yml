@@ -1,0 +1,22 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: locationService
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+jwt:
+  secret: q7H43OFKhI03ieTW4UsjMan+l2WqVDFGBIXDknfgWx21THp/fOf6W8yXv2lCGVaohJZkSUVrrnFGKwLV2dfk5w==
+
+location:
+  presence:
+    ttl-seconds: 300
+
+ride:
+  logging:
+    enabled: true

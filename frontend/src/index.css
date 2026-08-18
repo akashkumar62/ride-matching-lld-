@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+
+  --color-brand-50: #fff3ea;
+  --color-brand-100: #ffe1c7;
+  --color-brand-300: #ffab5e;
+  --color-brand-500: #ff7a1a;
+  --color-brand-600: #f2620a;
+  --color-brand-700: #c94e08;
+
+  --color-ink-900: #14171c;
+  --color-ink-800: #1c2027;
+  --color-ink-700: #262b34;
+
+  --color-rider: #2563eb;
+  --color-driver: #ff7a1a;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #f4f5f7;
+  color: #14171c;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d4d7dd;
+  border-radius: 999px;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.8); opacity: 0.6; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+.pulse-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: currentColor;
+  animation: pulse-ring 1.6s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+}
+
+@keyframes toast-in {
+  from { transform: translateX(16px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.animate-toast-in {
+  animation: toast-in 0.25s ease-out;
+}

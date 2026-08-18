@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Fleet Map — RideMatch Load Test</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body { height: 100%; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    #map { position: absolute; inset: 0; }
+    .panel {
+      position: absolute;
+      z-index: 1000;
+      background: rgba(20, 23, 28, 0.88);
+      color: #fff;
+      border-radius: 12px;
+      padding: 14px 18px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.35);
+      backdrop-filter: blur(4px);
+    }
+    #stats { top: 16px; left: 16px; min-width: 220px; }
+    #stats h1 { font-size: 13px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; opacity: .7; }
+    #stats .row { display: flex; justify-content: space-between; font-size: 13px; margin: 3px 0; gap: 16px; }
+    #stats .row b { font-variant-numeric: tabular-nums; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    #status-line { top: 16px; right: 16px; font-size: 12px; opacity: .85; }
+    #status-line.error { background: rgba(190, 40, 40, 0.9); }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="stats" class="panel">
+    <h1>Fleet — live</h1>
+    <div class="row"><span><span class="dot" style="background:#10b981"></span>Online</span><b id="count-online">0</b></div>
+    <div class="row"><span><span class="dot" style="background:#f59e0b"></span>Busy</span><b id="count-busy">0</b></div>
+    <div class="row"><span><span class="dot" style="background:#94a3b8"></span>Offline</span><b id="count-offline">0</b></div>
+    <div class="row"><span><span class="dot" style="background:#3b82f6"></span>Unknown</span><b id="count-unknown">0</b></div>
+    <div class="row"><span>Plotted</span><b id="count-total">0</b></div>
+    <div class="row"><span>Last refresh</span><b id="last-refresh">—</b></div>
+  </div>
+  <div id="status-line" class="panel">connecting…</div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const API_HOST = window.location.hostname || "localhost";
+    const AUTH_BASE = `http://${API_HOST}:8081`;
+    const DRIVER_BASE = `http://${API_HOST}:8083`;
+    const LOCATION_BASE = `http://${API_HOST}:8085`;
+
+    const ADMIN_EMAIL = "fleet-admin@ridematching.internal";
+    const ADMIN_PASSWORD = "FleetAdmin!2026Secure";
+
+    const LOCATIONS_POLL_MS = 1500;
+    const STATUS_POLL_MS = 5000;
+
+    const STATUS_COLOR = { ONLINE: "#10b981", BUSY: "#f59e0b", OFFLINE: "#94a3b8" };
+
+    let token = null;
+    const markers = new Map(); // email -> L.circleMarker
+    let statusByEmail = new Map(); // email -> "ONLINE"|"BUSY"|"OFFLINE"
+
+    const map = L.map("map", { preferCanvas: true, zoomControl: true }).setView([28.6139, 77.2090], 12);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors",
+    }).addTo(map);
+
+    function setStatusLine(text, isError) {
+      const el = document.getElementById("status-line");
+      el.textContent = text;
+      el.classList.toggle("error", !!isError);
+    }
+
+    async function jsonFetch(url, options) {
+      const res = await fetch(url, options);
+      const body = await res.json().catch(() => null);
+      if (!body) throw new Error(`Bad response from ${url}`);
+      if (!body.success) throw new Error(body.message || `Request failed: ${url}`);
+      return body.data;
+    }
+
+    async function bootstrapAdminSession() {
+      const loginBody = JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD });
+      try {
+        const data = await jsonFetch(`${AUTH_BASE}/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: loginBody,
+        });
+        return data.token;
+      } catch (e) {
+        // probably doesn't exist yet — register then login
+      }
+      await fetch(`${AUTH_BASE}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD, role: "ADMIN" }),
+      }).catch(() => {});
+      const data = await jsonFetch(`${AUTH_BASE}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: loginBody,
+      });
+      return data.token;
+    }
+
+    function authHeaders() {
+      return { Authorization: `Bearer ${token}` };
+    }
+
+    function upsertMarker(email, lat, lng, status) {
+      let marker = markers.get(email);
+      const color = STATUS_COLOR[status] || "#3b82f6";
+
+      if (!marker) {
+        marker = L.circleMarker([lat, lng], {
+          radius: 5,
+          color,
+          fillColor: color,
+          fillOpacity: 0.85,
+          weight: 1,
+        }).addTo(map);
+        marker.bindTooltip(email, { direction: "top", offset: [0, -6] });
+        markers.set(email, marker);
+      } else {
+        marker.setLatLng([lat, lng]);
+        marker.setStyle({ color, fillColor: color });
+      }
+    }
+
+    function removeStaleMarkers(currentEmails) {
+      for (const [email, marker] of markers) {
+        if (!currentEmails.has(email)) {
+          map.removeLayer(marker);
+          markers.delete(email);
+        }
+      }
+    }
+
+    function updateStats() {
+      let online = 0, busy = 0, offline = 0, unknown = 0;
+      for (const email of markers.keys()) {
+        const status = statusByEmail.get(email);
+        if (status === "ONLINE") online++;
+        else if (status === "BUSY") busy++;
+        else if (status === "OFFLINE") offline++;
+        else unknown++;
+      }
+      document.getElementById("count-online").textContent = online;
+      document.getElementById("count-busy").textContent = busy;
+      document.getElementById("count-offline").textContent = offline;
+      document.getElementById("count-unknown").textContent = unknown;
+      document.getElementById("count-total").textContent = markers.size;
+      document.getElementById("last-refresh").textContent = new Date().toLocaleTimeString();
+    }
+
+    async function pollLocations() {
+      try {
+        const all = await jsonFetch(`${LOCATION_BASE}/locations/all`, { headers: authHeaders() });
+        const currentEmails = new Set();
+        for (const d of all) {
+          currentEmails.add(d.driverEmail);
+          upsertMarker(d.driverEmail, d.latitude, d.longitude, statusByEmail.get(d.driverEmail));
+        }
+        removeStaleMarkers(currentEmails);
+        updateStats();
+        setStatusLine(`live — ${all.length} driver(s) plotted`, false);
+      } catch (e) {
+        setStatusLine(`locations poll failed: ${e.message}`, true);
+      }
+    }
+
+    async function pollStatuses() {
+      try {
+        const drivers = await jsonFetch(`${DRIVER_BASE}/drivers`, { headers: authHeaders() });
+        const next = new Map();
+        for (const d of drivers) next.set(d.email, d.status);
+        statusByEmail = next;
+        updateStats();
+      } catch (e) {
+        // non-fatal — location dots still render, just without status coloring
+      }
+    }
+
+    async function main() {
+      setStatusLine("authenticating…", false);
+      token = await bootstrapAdminSession();
+      setStatusLine("connected", false);
+
+      pollLocations();
+      pollStatuses();
+      setInterval(pollLocations, LOCATIONS_POLL_MS);
+      setInterval(pollStatuses, STATUS_POLL_MS);
+    }
+
+    main().catch((e) => setStatusLine(`failed to start: ${e.message}`, true));
+  </script>
+</body>
+</html>

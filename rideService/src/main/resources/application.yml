@@ -1,0 +1,43 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: rideService
+
+  datasource:
+    url: jdbc:postgresql://localhost:5433/ride_db
+    username: postgres
+    password: postgres
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+    show-sql: true
+
+  kafka:
+    bootstrap-servers: localhost:9092
+
+    consumer:
+      group-id: ride-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.ridematching.common.*"
+
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+jwt:
+  secret: q7H43OFKhI03ieTW4UsjMan+l2WqVDFGBIXDknfgWx21THp/fOf6W8yXv2lCGVaohJZkSUVrrnFGKwLV2dfk5w==
+
+matching:
+  max-wait-seconds: 240
+  reaper-interval-ms: 30000
+
+ride:
+  logging:
+    enabled: true
